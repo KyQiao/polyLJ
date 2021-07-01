@@ -13,7 +13,7 @@
 
 #ifdef PAIR_CLASS
 
-PairStyle(lj/cut/poly,PairLJPoly)
+PairStyle(lj/cut/poly, PairLJPoly)
 
 #else
 
@@ -22,43 +22,45 @@ PairStyle(lj/cut/poly,PairLJPoly)
 
 #include "pair.h"
 
-namespace LAMMPS_NS {
+namespace LAMMPS_NS
+{
 
-class PairLJPoly : public Pair {
- public:
-  PairLJPoly(class LAMMPS *);
-  virtual ~PairLJPoly();
-  virtual void compute(int, int);
-  void settings(int, char **);
-  void coeff(int, char **);
-  void init_style();
-  double init_one(int, int);
-  void write_restart(FILE *);
-  void read_restart(FILE *);
-  void write_restart_settings(FILE *);
-  void read_restart_settings(FILE *);
-  void write_data(FILE *);
-  void write_data_all(FILE *);
-  double single(int, int, int, int, double, double, double, double &);
-  void *extract(const char *, int &);
+   class PairLJPoly : public Pair
+   {
+   public:
+      PairLJPoly(class LAMMPS *);
+      virtual ~PairLJPoly();
+      virtual void compute(int, int);
+      void settings(int, char **);
+      void coeff(int, char **);
+      void init_style();
+      double init_one(int, int);
+      void write_restart(FILE *);
+      void read_restart(FILE *);
+      void write_restart_settings(FILE *);
+      void read_restart_settings(FILE *);
+      void write_data(FILE *);
+      void write_data_all(FILE *);
+      double single(int, int, int, int, double, double, double, double &);
+      void *extract(const char *, int &);
 
+   protected:
+      double cut_global;
+      double **cut;
+      double **epsilon, **sigma;
+      double **lj1, **lj2, **lj3, **lj4;
+      double non_addtive_para;
+      int non_addtive_para_flag=0;
 
-
- protected:
-  double cut_global;
-  double **cut;
-  double **epsilon,**sigma;
-  double **lj1,**lj2,**lj3,**lj4;
-
-  virtual void allocate();
-};
+      virtual void allocate();
+   };
 
 }
 
 #endif
 #endif
 
-/* ERROR/WARNING messages:
+    /* ERROR/WARNING messages:
 
 E: Illegal ... command
 

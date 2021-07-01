@@ -113,7 +113,7 @@ void PairLJPoly::compute(int eflag, int vflag)
       delz = ztmp - x[j][2];
       rsq = delx * delx + dely * dely + delz * delz;
       jtype = type[j];
-      sigma_ij = 0.5 * (q[j] + qtmp) * (1 - 0.2 * std::abs(q[j] - qtmp));
+      sigma_ij = 0.5 * (q[j] + qtmp) * (1 - non_addtive_para * std::abs(q[j] - qtmp));
       sigma_ij2 = sigma_ij * sigma_ij;
       // here cut will be a dimensionless number which represents cut*sigma_ij
       if (rsq < cutsq[itype][jtype] * sigma_ij2)
@@ -140,7 +140,7 @@ void PairLJPoly::compute(int eflag, int vflag)
 
         if (eflag)
         {
-          double ratio = sigma_ij / cut[itype][jtype];
+          double ratio = 1 / cut[itype][jtype];
           double ratio6 = pow(ratio, 6.0);
           double ratio12 = ratio6 * ratio6;
           evdwl = r6inv * (lj3[itype][jtype] * sigma_ij12 * r6inv - lj4[itype][jtype] * sigma_ij6) -
@@ -181,7 +181,6 @@ void PairLJPoly::allocate()
 
   memory->create(cut, n + 1, n + 1, "pair:cut");
   memory->create(epsilon, n + 1, n + 1, "pair:epsilon");
-  // memory->create(sigma, n + 1, n + 1, "pair:sigma");
   memory->create(lj1, n + 1, n + 1, "pair:lj1");
   memory->create(lj2, n + 1, n + 1, "pair:lj2");
   memory->create(lj3, n + 1, n + 1, "pair:lj3");
@@ -227,8 +226,14 @@ void PairLJPoly::coeff(int narg, char **arg)
   utils::bounds(FLERR, arg[1], 1, atom->ntypes, jlo, jhi, error);
 
   double epsilon_one = utils::numeric(FLERR, arg[2], false, lmp);
-  // double sigma_one = utils::numeric(FLERR, arg[3], false, lmp);
-
+  // the non_addtive_para can only be set once
+  if(comm->me==0){
+  if (non_addtive_para_flag == 0)
+    non_addtive_para = utils::numeric(FLERR, arg[3], false, lmp);
+  non_addtive_para_flag = 1;
+  }
+  MPI_Bcast(&non_addtive_para_flag, 1, MPI_INT,0, world);
+  MPI_Bcast(&non_addtive_para, 1, MPI_DOUBLE, 0, world);
   double cut_one = cut_global;
   if (narg == 5)
     cut_one = utils::numeric(FLERR, arg[4], false, lmp);
@@ -453,7 +458,7 @@ double PairLJPoly::single(int i, int j, int itype, int jtype, double rsq,
                           double &fforce)
 {
   double r2inv, r6inv, forcelj, philj;
-  double sigma_ij = 0.5 * (atom->q[j] + atom->q[i]) * (1 - 0.2 * std::abs(atom->q[j] - atom->q[i]));
+  double sigma_ij = 0.5 * (atom->q[j] + atom->q[i]) * (1 - non_addtive_para * std::abs(atom->q[j] - atom->q[i]));
   double sigma_ij2 = sigma_ij * sigma_ij;
   double sigma_ij6 = sigma_ij2 * sigma_ij2 * sigma_ij2;
   double sigma_ij12 = sigma_ij6 * sigma_ij6;
@@ -464,7 +469,7 @@ double PairLJPoly::single(int i, int j, int itype, int jtype, double rsq,
   fforce = factor_lj * forcelj * r2inv;
 
   // double ratio = sigma_ij / cut[itype][jtype];
-  // cutoff set to 2.5 sigma_ij,
+  // cutoff set to be a dimensionless one, so that
   double ratio = 1 / cut[itype][jtype];
   double ratio6 = pow(ratio, 6.0);
   double ratio12 = ratio6 * ratio6;
