@@ -244,20 +244,22 @@ int FixSwap::attempt_swap()
 
   int i = -1, j = -1;
   pick_swap_atom(&i, &j);
-  double qi, qj;
+  double qi=0, qj=0,qi_t=0,qj_t=0;
 
   // start swap
+  // MPI_Bcast should be called from a fixed thread for all thread
   if (i >= 0)
   {
-    qi = q[i];
-    MPI_Bcast(&qi, 1, MPI_DOUBLE, comm->me, world);
+    qi_t = q[i];
+    // MPI_Bcast(&qi, 1, MPI_DOUBLE, comm->me, world);
   }
   if (j >= 0)
   {
-    qj = q[j];
-    MPI_Bcast(&qj, 1, MPI_DOUBLE, comm->me, world);
+    qj_t = q[j];
+    // MPI_Bcast(&qj, 1, MPI_DOUBLE, comm->me, world);
   }
-
+  MPI_Allreduce(&qi, &qi_t, 1, MPI_DOUBLE, MPI_SUM, world);
+  MPI_Allreduce(&qj, &qj_t, 1, MPI_DOUBLE, MPI_SUM, world);
   if (i >= 0)
   {
     if (atom->q_flag)
