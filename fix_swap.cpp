@@ -258,8 +258,8 @@ int FixSwap::attempt_swap()
     qj_t = q[j];
     // MPI_Bcast(&qj, 1, MPI_DOUBLE, comm->me, world);
   }
-  MPI_Allreduce(&qi, &qi_t, 1, MPI_DOUBLE, MPI_SUM, world);
-  MPI_Allreduce(&qj, &qj_t, 1, MPI_DOUBLE, MPI_SUM, world);
+  MPI_Allreduce(&qi_t, &qi, 1, MPI_DOUBLE, MPI_SUM, world);
+  MPI_Allreduce(&qj_t, &qj, 1, MPI_DOUBLE, MPI_SUM, world);
   if (i >= 0)
   {
     if (atom->q_flag)
