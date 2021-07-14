@@ -18,6 +18,11 @@
 
 #include "fix_swap.h"
 
+#include <cctype>
+#include <cfloat>
+#include <cmath>
+#include <cstring>
+
 #include "angle.h"
 #include "atom.h"
 #include "bond.h"
@@ -38,21 +43,17 @@
 #include "random_park.h"
 #include "region.h"
 #include "update.h"
-#include <cctype>
-#include <cfloat>
-#include <cmath>
-#include <cstring>
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
 
 /* ---------------------------------------------------------------------- */
 
-FixSwap::FixSwap(LAMMPS *lmp, int narg, char **arg) : Fix(lmp, narg, arg),
-                                                      local_swap_atom_list(nullptr),
-                                                      random_equal(nullptr), random_unequal(nullptr), c_pe(nullptr)
-{
-  if (narg != 6)
+FixSwap::FixSwap(LAMMPS *lmp, int narg, char **arg) :
+    Fix(lmp, narg, arg),
+    local_swap_atom_list(nullptr),
+    random_equal(nullptr), random_unequal(nullptr), c_pe(nullptr) {
+  if (narg != 7)
     error->all(FLERR, "Illegal fix atom/swap command");
 
   dynamic_group_allow = 1;
@@ -69,6 +70,7 @@ FixSwap::FixSwap(LAMMPS *lmp, int narg, char **arg) : Fix(lmp, narg, arg),
   nevery = utils::inumeric(FLERR, arg[3], false, lmp);
   ncycles = utils::inumeric(FLERR, arg[4], false, lmp);
   seed = utils::inumeric(FLERR, arg[5], false, lmp);
+  Tlow = utils::inumeric(FLERR, arg[6], false, lmp);
 
   // double temperature = utils::numeric(FLERR, arg[6], false, lmp);
   // beta = 1.0 / (force->boltz * temperature);
@@ -111,16 +113,14 @@ FixSwap::FixSwap(LAMMPS *lmp, int narg, char **arg) : Fix(lmp, narg, arg),
 
 /* ---------------------------------------------------------------------- */
 
-FixSwap::~FixSwap()
-{
+FixSwap::~FixSwap() {
   delete random_equal;
   delete random_unequal;
 }
 
 /* ---------------------------------------------------------------------- */
 
-int FixSwap::setmask()
-{
+int FixSwap::setmask() {
   int mask = 0;
   mask |= PRE_EXCHANGE;
   return mask;
@@ -130,8 +130,7 @@ int FixSwap::setmask()
 //initialization before a run(optional)
 // check some parameter
 /* ---------------------------------------------------------------------- */
-void FixSwap::init()
-{
+void FixSwap::init() {
   char *id_pe = (char *)"thermo_pe";
   int ipe = modify->find_compute(id_pe);
   c_pe = modify->compute[ipe];
@@ -139,8 +138,7 @@ void FixSwap::init()
   // check that no swappable atoms are in atom->firstgroup
   // swapping such an atom might not leave firstgroup atoms first
 
-  if (atom->firstgroup >= 0)
-  {
+  if (atom->firstgroup >= 0) {
     int *mask = atom->mask;
     int firstgroupbit = group->bitmask[atom->firstgroup];
 
@@ -157,30 +155,25 @@ void FixSwap::init()
   }
 }
 
-double FixSwap::ComputeTemp()
-{
+double FixSwap::ComputeTemp() {
   double **v = atom->v;
   double *mass = atom->mass;
   double *rmass = atom->rmass;
   int *type = atom->type;
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
-  double scalar=0;
+  double scalar = 0;
   double t = 0.0;
   double dof = domain->dimension * atom->natoms;
 
-  if (rmass)
-  {
+  if (rmass) {
     for (int i = 0; i < nlocal; i++)
       if (mask[i] & groupbit)
         t += (v[i][0] * v[i][0] + v[i][1] * v[i][1] + v[i][2] * v[i][2]) * rmass[i];
-  }
-  else
-  {
+  } else {
     for (int i = 0; i < nlocal; i++)
       if (mask[i] & groupbit)
-        t += (v[i][0] * v[i][0] + v[i][1] * v[i][1] + v[i][2] * v[i][2]) *
-             mass[type[i]];
+        t += (v[i][0] * v[i][0] + v[i][1] * v[i][1] + v[i][2] * v[i][2]) * mass[type[i]];
   }
 
   double tfactor = force->mvv2e / (dof * force->boltz);
@@ -194,8 +187,7 @@ double FixSwap::ComputeTemp()
    attempt Monte Carlo swaps
 ------------------------------------------------------------------------- */
 
-void FixSwap::pre_exchange()
-{
+void FixSwap::pre_exchange() {
   // just return if should not be called on this timestep
 
   if (next_reneighbor != update->ntimestep)
@@ -220,23 +212,25 @@ void FixSwap::pre_exchange()
   double temperature = ComputeTemp();
   beta = 1.0 / (force->boltz * temperature);
 
-  update_swap_atoms_list();
-  for (int i = 0; i < ncycles; i++)
-    nsuccess += attempt_swap();
+// add a parameter to set a swap onset
+  if (temperature <= Tlow) {
+    update_swap_atoms_list();
+    for (int i = 0; i < ncycles; i++)
+      nsuccess += attempt_swap();
 
-  nswap_attempts += ncycles;
-  nswap_successes += nsuccess;
+    nswap_attempts += ncycles;
+    nswap_successes += nsuccess;
 
-  // used to update some parameter?
-  energy_full();
-  next_reneighbor = update->ntimestep + nevery;
+    // used to update some parameter?
+    energy_full();
+    next_reneighbor = update->ntimestep + nevery;
+  }
 }
 
 /* ----------------------------------------------------------------------
 ------------------------------------------------------------------------- */
 
-int FixSwap::attempt_swap()
-{
+int FixSwap::attempt_swap() {
   if (nswap == 0)
     return 0;
   double *q = atom->q;
@@ -244,29 +238,25 @@ int FixSwap::attempt_swap()
 
   int i = -1, j = -1;
   pick_swap_atom(&i, &j);
-  double qi=0, qj=0,qi_t=0,qj_t=0;
+  double qi = 0, qj = 0, qi_t = 0, qj_t = 0;
 
   // start swap
   // MPI_Bcast should be called from a fixed thread for all thread
-  if (i >= 0)
-  {
+  if (i >= 0) {
     qi_t = q[i];
     // MPI_Bcast(&qi, 1, MPI_DOUBLE, comm->me, world);
   }
-  if (j >= 0)
-  {
+  if (j >= 0) {
     qj_t = q[j];
     // MPI_Bcast(&qj, 1, MPI_DOUBLE, comm->me, world);
   }
   MPI_Allreduce(&qi_t, &qi, 1, MPI_DOUBLE, MPI_SUM, world);
   MPI_Allreduce(&qj_t, &qj, 1, MPI_DOUBLE, MPI_SUM, world);
-  if (i >= 0)
-  {
+  if (i >= 0) {
     if (atom->q_flag)
       atom->q[i] = qj;
   }
-  if (j >= 0)
-  {
+  if (j >= 0) {
     if (atom->q_flag)
       atom->q[j] = qi;
   }
@@ -278,27 +268,21 @@ int FixSwap::attempt_swap()
 
   double energy_after = energy_full();
 
-  if (random_equal->uniform() <
-      exp(beta * (energy_before - energy_after)))
-  {
+  if (random_equal->uniform() < exp(beta * (energy_before - energy_after))) {
     // success
     // no need to update list
     // no particle will move and no type will change
     // update_swap_atoms_list();
     energy_stored = energy_after;
     return 1;
-  }
-  else
-  {
+  } else {
     // fail
     // swap back
-    if (i >= 0)
-    {
+    if (i >= 0) {
       if (atom->q_flag)
         atom->q[i] = qi;
     }
-    if (j >= 0)
-    {
+    if (j >= 0) {
       if (atom->q_flag)
         atom->q[j] = qj;
     }
@@ -312,8 +296,7 @@ int FixSwap::attempt_swap()
    compute system potential energy
 ------------------------------------------------------------------------- */
 
-double FixSwap::energy_full()
-{
+double FixSwap::energy_full() {
   int eflag = 1;
   int vflag = 0;
 
@@ -325,8 +308,7 @@ double FixSwap::energy_full()
   if (force->pair)
     force->pair->compute(eflag, vflag);
 
-  if (atom->molecular)
-  {
+  if (atom->molecular) {
     if (force->bond)
       force->bond->compute(eflag, vflag);
     if (force->angle)
@@ -354,24 +336,19 @@ double FixSwap::energy_full()
 /* ----------------------------------------------------------------------
 ------------------------------------------------------------------------- */
 
-void FixSwap::pick_swap_atom(int *i, int *j)
-{
+void FixSwap::pick_swap_atom(int *i, int *j) {
   int iwhichglobal = static_cast<int>(nswap * random_equal->uniform());
   int jwhichglobal = static_cast<int>(nswap * random_equal->uniform());
   while (iwhichglobal == jwhichglobal)
     jwhichglobal = static_cast<int>(nswap * random_equal->uniform());
 
   // find out if choosen particle on this proc
-  if ((iwhichglobal >= nswap_before) &&
-      (iwhichglobal < nswap_before + nswap_local))
-  {
+  if ((iwhichglobal >= nswap_before) && (iwhichglobal < nswap_before + nswap_local)) {
     int iwhichlocal = iwhichglobal - nswap_before;
     *i = local_swap_atom_list[iwhichlocal];
   }
 
-  if ((jwhichglobal >= nswap_before) &&
-      (jwhichglobal < nswap_before + nswap_local))
-  {
+  if ((jwhichglobal >= nswap_before) && (jwhichglobal < nswap_before + nswap_local)) {
     int jwhichlocal = jwhichglobal - nswap_before;
     *j = local_swap_atom_list[jwhichlocal];
   }
@@ -381,14 +358,12 @@ void FixSwap::pick_swap_atom(int *i, int *j)
    update the list of gas atoms
 ------------------------------------------------------------------------- */
 
-void FixSwap::update_swap_atoms_list()
-{
+void FixSwap::update_swap_atoms_list() {
   // the info is local
   int nlocal = atom->nlocal;
   double **x = atom->x;
 
-  if (atom->nmax > atom_swap_nmax)
-  {
+  if (atom->nmax > atom_swap_nmax) {
     memory->sfree(local_swap_atom_list);
     // max # of owned+ghost in arrays on this proc
     atom_swap_nmax = atom->nmax;
@@ -398,10 +373,8 @@ void FixSwap::update_swap_atoms_list()
   // # of local swappable particle
   nswap_local = 0;
 
-  for (int i = 0; i < nlocal; i++)
-  {
-    if (atom->mask[i] & groupbit)
-    {
+  for (int i = 0; i < nlocal; i++) {
+    if (atom->mask[i] & groupbit) {
       local_swap_atom_list[nswap_local] = i;
       nswap_local++;
     }
@@ -414,8 +387,7 @@ void FixSwap::update_swap_atoms_list()
 
 /* ---------------------------------------------------------------------- */
 
-int FixSwap::pack_forward_comm(int n, int *list, double *buf, int /*pbc_flag*/, int * /*pbc*/)
-{
+int FixSwap::pack_forward_comm(int n, int *list, double *buf, int /*pbc_flag*/, int * /*pbc*/) {
   int i, j, m;
 
   int *type = atom->type;
@@ -423,19 +395,14 @@ int FixSwap::pack_forward_comm(int n, int *list, double *buf, int /*pbc_flag*/, 
 
   m = 0;
 
-  if (atom->q_flag)
-  {
-    for (i = 0; i < n; i++)
-    {
+  if (atom->q_flag) {
+    for (i = 0; i < n; i++) {
       j = list[i];
       buf[m++] = type[j];
       buf[m++] = q[j];
     }
-  }
-  else
-  {
-    for (i = 0; i < n; i++)
-    {
+  } else {
+    for (i = 0; i < n; i++) {
       j = list[i];
       buf[m++] = type[j];
     }
@@ -446,8 +413,7 @@ int FixSwap::pack_forward_comm(int n, int *list, double *buf, int /*pbc_flag*/, 
 
 /* ---------------------------------------------------------------------- */
 
-void FixSwap::unpack_forward_comm(int n, int first, double *buf)
-{
+void FixSwap::unpack_forward_comm(int n, int first, double *buf) {
   int i, m, last;
 
   int *type = atom->type;
@@ -456,16 +422,12 @@ void FixSwap::unpack_forward_comm(int n, int first, double *buf)
   m = 0;
   last = first + n;
 
-  if (atom->q_flag)
-  {
-    for (i = first; i < last; i++)
-    {
+  if (atom->q_flag) {
+    for (i = first; i < last; i++) {
       type[i] = static_cast<int>(buf[m++]);
       q[i] = buf[m++];
     }
-  }
-  else
-  {
+  } else {
     for (i = first; i < last; i++)
       type[i] = static_cast<int>(buf[m++]);
   }
@@ -475,8 +437,7 @@ void FixSwap::unpack_forward_comm(int n, int first, double *buf)
   return acceptance ratio
 ------------------------------------------------------------------------- */
 
-double FixSwap::compute_vector(int n)
-{
+double FixSwap::compute_vector(int n) {
   if (n == 0)
     return nswap_attempts;
   if (n == 1)
@@ -488,8 +449,7 @@ double FixSwap::compute_vector(int n)
    memory usage of local atom-based arrays
 ------------------------------------------------------------------------- */
 
-double FixSwap::memory_usage()
-{
+double FixSwap::memory_usage() {
   double bytes = (double)atom_swap_nmax * sizeof(int);
   return bytes;
 }
@@ -498,8 +458,7 @@ double FixSwap::memory_usage()
    pack entire state of Fix into one write
 ------------------------------------------------------------------------- */
 
-void FixSwap::write_restart(FILE *fp)
-{
+void FixSwap::write_restart(FILE *fp) {
   int n = 0;
   double list[6];
   list[n++] = random_equal->state();
@@ -509,8 +468,7 @@ void FixSwap::write_restart(FILE *fp)
   list[n++] = nswap_successes;
   list[n++] = ubuf(update->ntimestep).d;
 
-  if (comm->me == 0)
-  {
+  if (comm->me == 0) {
     int size = n * sizeof(double);
     fwrite(&size, sizeof(int), 1, fp);
     fwrite(list, sizeof(double), n, fp);
@@ -521,8 +479,7 @@ void FixSwap::write_restart(FILE *fp)
    use state info from restart file to restart the Fix
 ------------------------------------------------------------------------- */
 
-void FixSwap::restart(char *buf)
-{
+void FixSwap::restart(char *buf) {
   int n = 0;
   double *list = (double *)buf;
 

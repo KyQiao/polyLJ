@@ -57,6 +57,7 @@ namespace LAMMPS_NS
 
     int atom_swap_nmax;
     double beta;
+    double Tlow;
 
     double energy_stored;
 
