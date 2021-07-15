@@ -70,7 +70,7 @@ FixSwap::FixSwap(LAMMPS *lmp, int narg, char **arg) :
   nevery = utils::inumeric(FLERR, arg[3], false, lmp);
   ncycles = utils::inumeric(FLERR, arg[4], false, lmp);
   seed = utils::inumeric(FLERR, arg[5], false, lmp);
-  Tlow = utils::inumeric(FLERR, arg[6], false, lmp);
+  Tlow = utils::numeric(FLERR, arg[6], false, lmp);
 
   // double temperature = utils::numeric(FLERR, arg[6], false, lmp);
   // beta = 1.0 / (force->boltz * temperature);
