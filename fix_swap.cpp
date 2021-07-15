@@ -212,7 +212,7 @@ void FixSwap::pre_exchange() {
   double temperature = ComputeTemp();
   beta = 1.0 / (force->boltz * temperature);
 
-// add a parameter to set a swap onset
+  // add a parameter to set a swap onset
   if (temperature <= Tlow) {
     update_swap_atoms_list();
     for (int i = 0; i < ncycles; i++)
@@ -223,8 +223,8 @@ void FixSwap::pre_exchange() {
 
     // used to update some parameter?
     energy_full();
-    next_reneighbor = update->ntimestep + nevery;
   }
+  next_reneighbor = update->ntimestep + nevery;
 }
 
 /* ----------------------------------------------------------------------
