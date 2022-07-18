@@ -17,11 +17,14 @@ matplotlib.use('agg')
 # where ID is an atom ID and value is the per-atom numeric value that will be assigned to that atom. IDs can be listed in any order.
 
 
-def guassian():
-    pass
+def Guassian(N, small, vs):
+    # ratio: small particle: Ntotal
+    Ns = int(N)
+    xs = np.random.normal(small, vs, Ns)
+    return np.arange(1, N+1), xs
 
 
-def binaryGaussian(N, small, vs, large, vl, ratio):
+def binaryGuassian(N, small, vs, large, vl, ratio):
     # ratio: small particle: Ntotal
     Ns = int(N*ratio)
     Nb = N-Ns
@@ -30,11 +33,28 @@ def binaryGaussian(N, small, vs, large, vl, ratio):
     return np.arange(1, N+1), np.hstack((xs, xb))
 
 
+def berthier(N):
+    l = 0.73
+    r = 1.62
+    A = -2/(1/r**2-1/l**2)
+
+    def distribution(x):
+        return A/x**3
+
+    x = np.random.rand(N)
+    x = (distribution(l) - distribution(r))*x+distribution(r)
+    y = (A/x)**(1/3)
+    return np.arange(1, N+1), y
+
+
 def powerlaw():
     pass
 
 
-def atomfile(file, ID, charge):
+def atomfile(file, ID, charge, shuffle):
+    # shuffle the order
+    if shuffle:
+        np.random.shuffle(charge)
     with open(file, 'w') as f:
         assert len(ID) == len(charge)
         f.write("{} \n".format(len(ID)))
@@ -65,7 +85,14 @@ def make_parser():
         "-r",  help="Ratio of small particles in total number, default 0.5", default=0.5, type=float)
     parser.add_argument("--addfig",  help="Produce figure of distribution",
                         action="store_true", default=False)
-
+    parser.add_argument("--shuffle",  help="shuffle order of size distribution",
+                        action="store_true", default=False)
+    parser.add_argument("--binary",  help="binary guassian distribution",
+                        action="store_true", default=False)
+    parser.add_argument("--guassian",  help="guassian distribution",
+                        action="store_true", default=False)
+    parser.add_argument("--B",  help="powerlaw distribution",
+                        action="store_true", default=False)
     return parser
 
 
@@ -75,8 +102,23 @@ if __name__ == "__main__":
     args = p.parse_args()
     # args = p.parse_args(sys.argv[1:])
     N = args.N
-    ID, charge = binaryGaussian(
-        N, args.s, args.vs, args.b, args.vb, args.r)
+
+    if args.guassian:
+        # onlu small one is needed
+        ID, charge = Guassian(N, args.s, args.vs)
+    elif args.binary:
+        ID, charge = binaryGuassian(
+            N, args.s, args.vs, args.b, args.vb, args.r)
+    elif args.B:
+        ID, charge = berthier(N)
+    else:
+        print("must choose from binary, guassian and power law")
+        quit
+
     if args.addfig:
         testResult(charge, str(N)+"atom")
-    atomfile(str(N)+"atom.xyz", ID, charge)
+
+    if args.shuffle:
+        atomfile(str(N)+"atomShuffle.xyz", ID, charge, True)
+    else:
+        atomfile(str(N)+"atomOrder.xyz", ID, charge, False)
