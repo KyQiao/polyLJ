@@ -102,8 +102,9 @@ neigh_modify    every 20 delay 0 check no
 
 
 fix             1 all nvt temp 0.01 0.05 0.25
-# 	swap 10000 times every 40000 steps with a random seed 111821 with accept Temp threshold 0.1
-# 	last parameter means start swap when T<0.1, 
+#swap 100 times every 400 steps with a random seed 111821 with Temp threshold 0.1
+#the last parameter means start swap when T<0.1
+#if you don't need it, just set it to a very high value 
 fix             swap all swap 100 400 111821 0.1
 fix             2d all enforce2d
 
