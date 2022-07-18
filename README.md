@@ -20,7 +20,29 @@ The current version doesn’t introduce the polynomial term, only the normal cut
 
 Move all c++ files (sources and headers) to LAMMPS source folder (e.g. `/lammps/src`) and compile again.
 
+
+
+## Notes on the algorithm
+
+The current version of `swap` is a serial version. 
+
+It’s straightforward to extend the algorithm to a parallel version. In `OpenMP`, we can set locks for every particle to control the access. While for Open-MPI, the `RMA_mutex` lock can somehow perform the same thing. This part is remained to be implemented.
+
+
+
 ## Notes on using the potential:
+
+- A practical initialization process
+
+If you need a high-density simulation, you should start with a low-density-large-box one, then use an NPT to compress the whole system. The swap of particles will make the process really fast. Then you can change Fix type to NVT.
+
+- types of particle?
+
+The size of particles is set outside. So only one type is allowed and by default, we swap all the particles. The information is stored as charges in LAMMPS. Once you set all the particle sizes, the info can be stored in the restart file. 
+
+- restart from `restart` file?
+
+**You have to set `pair_style` and `neighbor` (and other neighbor settings) again when you restart from the file. No need to import size again.**  
 
 - How to set neighbor correct?
 
@@ -33,6 +55,8 @@ neighbor        1.5 bin
 neigh_modify    every 20 delay 0 check no 
 #check no to make sure build neighbor list correctly 
 ```
+
+1.375 is calculated from $2.5\times1.55-2.5 = 1.375$. 
 
 - How to set pair coefficient?
 
@@ -102,7 +126,7 @@ neigh_modify    every 20 delay 0 check no
 
 
 fix             1 all nvt temp 0.01 0.05 0.25
-#swap 100 times every 400 steps with a random seed 111821 with Temp threshold 0.1
+#swap 400 times every 100 steps with a random seed 111821 with Temp threshold 0.1
 #the last parameter means start swap when T<0.1
 #if you don't need it, just set it to a very high value 
 fix             swap all swap 100 400 111821 0.1
@@ -115,4 +139,3 @@ run             10000
 unfix           2d
 unfix           swap
 ```
-
